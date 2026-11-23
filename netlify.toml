@@ -1,0 +1,19 @@
+[build]
+  command = "npm --prefix app install && npm --prefix app run build"
+  publish = "app/dist"
+
+[build.environment]
+  NODE_VERSION = "24"
+
+[server]
+  size = "small"
+
+[server.scale]
+  min = 0
+  max = 1
+
+# Only rewrite frontend SPA share route so /api/* always reaches Netlify Server!
+[[redirects]]
+  from = "/share/*"
+  to = "/index.html"
+  status = 200
