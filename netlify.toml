@@ -1,5 +1,5 @@
 [build]
-  command = "npm --prefix app install && npm --prefix app run build"
+  command = "npm --prefix app install --include=dev && npm --prefix app run build"
   publish = "app/dist"
 
 [build.environment]
