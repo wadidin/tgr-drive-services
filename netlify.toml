@@ -1,19 +1,12 @@
+# Frontend-ONLY Netlify configuration (app/)
 [build]
-  command = "npm --prefix app install --include=dev && npm --prefix app run build"
+  command = "cd app && rm -rf node_modules package-lock.json && npm install --include=dev && npm run build"
   publish = "app/dist"
 
 [build.environment]
   NODE_VERSION = "24"
 
-[server]
-  size = "small"
-
-[server.scale]
-  min = 0
-  max = 1
-
-# Only rewrite frontend SPA share route so /api/* always reaches Netlify Server!
 [[redirects]]
-  from = "/share/*"
+  from = "/*"
   to = "/index.html"
   status = 200
