@@ -1324,7 +1324,7 @@ export default function App() {
                         </button>
                         <span className="drive-list-hide-sm mono" style={{ fontSize: 12 }}>UPLOADER BY</span>
                         <span className="drive-list-hide-sm mono" style={{ fontSize: 12 }}>TIPE</span>
-                        <button className="drive-sort-th" onClick={() => handleSortHeaderClick('size')}>
+                        <button className="drive-sort-th drive-list-hide-sm" onClick={() => handleSortHeaderClick('size')}>
                           UKURAN {sortField === 'size' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                         </button>
                         <button
@@ -1333,7 +1333,7 @@ export default function App() {
                         >
                           DIUBAH {sortField === 'modifiedTime' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                         </button>
-                        <span className="drive-list-hide-sm mono" style={{ fontSize: 12 }}>AKSI</span>
+                        <span className="mono" style={{ fontSize: 11 }}>AKSI</span>
                       </div>
 
                       {filteredAndSorted.map((item) => {
@@ -1398,11 +1398,7 @@ export default function App() {
                             </div>
 
                             <div
-                              style={{
-                                cursor: 'pointer',
-                                wordBreak: 'break-word',
-                                lineHeight: 1.3,
-                              }}
+                              style={{ cursor: 'pointer', minWidth: 0 }}
                               title={item.name}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1410,7 +1406,11 @@ export default function App() {
                                 else openPreview(item);
                               }}
                             >
-                              {item.name}
+                              <div className="drive-folder-title">{item.name}</div>
+                              <div className="mono drive-list-mobile-sub">
+                                {item.isFolder ? 'FOLDER' : formatBytes(item.size)}
+                                {item.uploadedBy ? ` • @${item.uploadedBy}` : ''}
+                              </div>
                             </div>
 
                             <span className="drive-list-hide-sm mono" style={{ fontSize: 11, color: '#000' }}>
@@ -1433,7 +1433,7 @@ export default function App() {
                               </span>
                             </span>
 
-                            <span className="mono">{item.isFolder ? '—' : formatBytes(item.size)}</span>
+                            <span className="mono drive-list-hide-sm">{item.isFolder ? '—' : formatBytes(item.size)}</span>
 
                             <span className="mono drive-list-hide-sm" style={{ fontSize: 11 }}>
                               {item.modifiedTime
@@ -1441,7 +1441,7 @@ export default function App() {
                                 : '-'}
                             </span>
 
-                            <div className="drive-list-hide-sm" style={{ display: 'flex', gap: 5 }}>
+                            <div style={{ display: 'flex', gap: 4 }}>
                               {!item.isFolder && (
                                 <>
                                   <button
@@ -1525,10 +1525,10 @@ export default function App() {
                                 }}
                                 onClick={() => openFolder(folder)}
                               >
-                                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, minWidth: 0, flex: 1 }}>
-                                    <Folder size={22} fill="#FFE600" style={{ flexShrink: 0, marginTop: 2 }} />
-                                    <span className="drive-item-title">
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                                    <Folder size={20} fill="#FFE600" style={{ flexShrink: 0 }} />
+                                    <span className="drive-folder-title" title={folder.name}>
                                       {folder.name}
                                     </span>
                                   </div>
@@ -1562,8 +1562,8 @@ export default function App() {
                                     </button>
                                   </div>
                                 </div>
-                                <div className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>
-                                  Uploader by: {folder.uploadedBy ? `@${folder.uploadedBy}` : '—'}
+                                <div className="mono drive-uploader-line" style={{ color: 'var(--muted)' }}>
+                                  By: {folder.uploadedBy ? `@${folder.uploadedBy}` : '—'}
                                 </div>
                               </div>
                             ))}
@@ -1635,8 +1635,8 @@ export default function App() {
                                     <div className="drive-item-title" title={file.name}>
                                       {file.name}
                                     </div>
-                                    <div className="mono" style={{ fontSize: 11, fontWeight: 800, color: '#000' }}>
-                                      Uploader by: {file.uploadedBy ? `@${file.uploadedBy}` : '—'}
+                                    <div className="mono drive-uploader-line">
+                                      By: {file.uploadedBy ? `@${file.uploadedBy}` : '—'}
                                     </div>
                                     <div className="mono drive-card-meta-row">
                                       <span>{formatBytes(file.size)}</span>
@@ -1819,7 +1819,7 @@ export default function App() {
           {/* ==================== TAB 2: HISTORY ==================== */}
           {tab === 'history' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+              <div className="kpi-grid-3">
                 <div className="max-card-sm" style={{ background: 'var(--cobalt)', padding: 18 }}>
                   <div className="mono" style={{ fontSize: 11, fontWeight: 800 }}>TOTAL FILE SAYA</div>
                   <div style={{ fontSize: 30, fontWeight: 800 }}>{historyStats.totalFiles}</div>

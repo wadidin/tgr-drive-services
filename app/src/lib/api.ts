@@ -212,6 +212,31 @@ export const api = {
     `${API_BASE}/api/public/share/${encodeURIComponent(token)}/files/${encodeURIComponent(fileId)}/thumbnail`,
   getPublicStreamUrl: (token: string, fileId: string) =>
     `${API_BASE}/api/public/share/${encodeURIComponent(token)}/files/${encodeURIComponent(fileId)}/stream`,
+  getPublicDownloadUrl: (token: string, fileId: string) =>
+    `${API_BASE}/api/public/share/${encodeURIComponent(token)}/files/${encodeURIComponent(fileId)}/download`,
+  downloadPublicZip: async (token: string, fileIds: string[]) => {
+    const res = await fetch(
+      `${API_BASE}/api/public/share/${encodeURIComponent(token)}/download-zip`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileIds }),
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error ?? 'Gagal mengunduh ZIP.');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tgr-share-${fileIds.length}-files.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
   getThumbnailUrl: (fileId: string) => withAuthQuery(`/api/drive/files/${encodeURIComponent(fileId)}/thumbnail`),
   getStreamUrl: (fileId: string) => withAuthQuery(`/api/drive/files/${encodeURIComponent(fileId)}/stream`),
   getDownloadUrl: (fileId: string) => withAuthQuery(`/api/drive/files/${encodeURIComponent(fileId)}/download`),

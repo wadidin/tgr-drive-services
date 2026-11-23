@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownAZ,
   ArrowUpAZ,
+  Check,
   ChevronLeft,
   ChevronRight,
+  Download,
   Eye,
   Film,
   Folder,
@@ -49,11 +51,13 @@ export default function PublicSharePage({ token }: { token: string }) {
   const [breadcrumbs, setBreadcrumbs] = useState<{ id: string; name: string }[]>([]);
   const [items, setItems] = useState<DriveItem[]>([]);
 
-  // Only allowed controls: Refresh, Grid/List, Sorting, Filter, Preview
+  // Allowed controls: Refresh, Grid/List, Sorting, Filter, Preview, Single/Multi Download
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [zipBusy, setZipBusy] = useState(false);
 
   // Preview Modal XL state
   const [previewFile, setPreviewFile] = useState<DriveItem | null>(null);
@@ -78,6 +82,7 @@ export default function PublicSharePage({ token }: { token: string }) {
           setBreadcrumbs([{ id: res.share.driveItemId, name: res.share.itemName }]);
         }
       }
+      setSelectedIds(new Set());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Link share tidak dapat dibuka.');
     } finally {
@@ -140,12 +145,47 @@ export default function PublicSharePage({ token }: { token: string }) {
     }
   }
 
+  function toggleSelect(fileId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) next.delete(fileId);
+      else next.add(fileId);
+      return next;
+    });
+  }
+
+  function selectAllFiles() {
+    const fileIds = mediaFiles.map((f) => f.id);
+    if (selectedIds.size === fileIds.length && fileIds.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(fileIds));
+    }
+  }
+
+  async function handleMultiDownload() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (ids.length === 1) {
+      window.open(api.getPublicDownloadUrl(token, ids[0]), '_blank');
+      return;
+    }
+    setZipBusy(true);
+    try {
+      await api.downloadPublicZip(token, ids);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal mengunduh ZIP.');
+    } finally {
+      setZipBusy(false);
+    }
+  }
+
   const previewIndex = previewFile ? mediaFiles.findIndex((f) => f.id === previewFile.id) : -1;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Fullscreen Blurred Preloader */}
-      {loading && (
+      {(loading || zipBusy) && (
         <div className="tgr-preloader-overlay">
           <div className="tgr-preloader-box">
             <img src={PRELOADER_LOGO_URL} alt="TGR Logo" className="tgr-preloader-logo" />
@@ -153,7 +193,7 @@ export default function PublicSharePage({ token }: { token: string }) {
               <div className="tgr-preloader-bar" />
             </div>
             <div className="mono" style={{ fontSize: 12, fontWeight: 800 }}>
-              MEMUAT SHARED DRIVE...
+              {zipBusy ? 'MENYIAPKAN ARSIP ZIP...' : 'MEMUAT SHARED DRIVE...'}
             </div>
           </div>
         </div>
@@ -161,39 +201,39 @@ export default function PublicSharePage({ token }: { token: string }) {
 
       {/* Read-Only Public Topbar */}
       <header className="topbar" style={{ background: '#FFE600' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <div
             style={{
               background: '#000',
               color: 'var(--lime)',
-              padding: '8px 12px',
+              padding: '7px 11px',
               fontWeight: 800,
-              fontSize: 16,
+              fontSize: 15,
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 8,
+              gap: 6,
             }}
           >
-            <HardDrive size={18} /> TGR DRIVE
+            <HardDrive size={16} /> TGR DRIVE
           </div>
           <span className="pill" style={{ background: '#FFFFFF', color: '#000' }}>
-            👁 PREVIEW
+            👁 SHARED • PREVIEW & DOWNLOAD
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           {isFolderShare && (
             <>
               <button
                 className={`max-btn ${viewMode === 'list' ? 'btn-cobalt' : 'btn-ink'}`}
-                style={{ padding: '8px 10px' }}
+                style={{ padding: '7px 10px' }}
                 onClick={() => setViewMode('list')}
               >
                 <List size={15} /> LIST
               </button>
               <button
                 className={`max-btn ${viewMode === 'grid' ? 'btn-cobalt' : 'btn-ink'}`}
-                style={{ padding: '8px 10px' }}
+                style={{ padding: '7px 10px' }}
                 onClick={() => setViewMode('grid')}
               >
                 <LayoutGrid size={15} /> GRID
@@ -202,7 +242,7 @@ export default function PublicSharePage({ token }: { token: string }) {
           )}
           <button
             className="max-btn btn-mint"
-            style={{ padding: '8px 12px' }}
+            style={{ padding: '7px 10px' }}
             onClick={() => loadShare(activeFolderId)}
             title="Refresh"
           >
@@ -213,39 +253,48 @@ export default function PublicSharePage({ token }: { token: string }) {
 
       <main className="page-content" style={{ margin: '0 auto', maxWidth: 1280, paddingBottom: 48 }}>
         {error ? (
-          <div className="max-card" style={{ padding: 36, background: '#FFE5EC', textAlign: 'center' }}>
+          <div className="max-card" style={{ padding: 28, background: '#FFE5EC', textAlign: 'center' }}>
             <h2 style={{ marginTop: 0 }}>LINK SHARE TIDAK TERSEDIA</h2>
             <p style={{ fontWeight: 700 }}>{error}</p>
           </div>
         ) : !isFolderShare && singleFile ? (
-          /* ==================== SINGLE SHARED FILE VIEW (NO LOGIN, PREVIEW ONLY) ==================== */
+          /* ==================== SINGLE SHARED FILE VIEW (PREVIEW + DOWNLOAD) ==================== */
           <div className="preview-modal-xl" style={{ margin: '0 auto', width: '100%' }}>
             <div className="preview-topbar">
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 16, wordBreak: 'break-word' }}>{singleFile.name}</div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontWeight: 800, fontSize: 15, wordBreak: 'break-word' }}>{singleFile.name}</div>
                 <div className="mono" style={{ fontSize: 11, fontWeight: 700 }}>
-                  {formatBytes(singleFile.size)} • {singleFile.mimeType}
-                  {singleFile.uploadedBy ? ` • Uploader by: @${singleFile.uploadedBy}` : ''}
+                  {formatBytes(singleFile.size)}
+                  {singleFile.uploadedBy ? ` • @${singleFile.uploadedBy}` : ''}
                 </div>
               </div>
-              {isImageItem(singleFile) && (
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    className="max-btn btn-ink"
-                    style={{ padding: '8px 10px' }}
-                    onClick={() => setPreviewZoom((z) => Math.max(0.5, z - 0.25))}
-                  >
-                    <ZoomOut size={15} />
-                  </button>
-                  <button
-                    className="max-btn btn-ink"
-                    style={{ padding: '8px 10px' }}
-                    onClick={() => setPreviewZoom((z) => Math.min(3, z + 0.25))}
-                  >
-                    <ZoomIn size={15} />
-                  </button>
-                </div>
-              )}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {isImageItem(singleFile) && (
+                  <>
+                    <button
+                      className="max-btn btn-ink"
+                      style={{ padding: '7px 9px' }}
+                      onClick={() => setPreviewZoom((z) => Math.max(0.5, z - 0.25))}
+                    >
+                      <ZoomOut size={15} />
+                    </button>
+                    <button
+                      className="max-btn btn-ink"
+                      style={{ padding: '7px 9px' }}
+                      onClick={() => setPreviewZoom((z) => Math.min(3, z + 0.25))}
+                    >
+                      <ZoomIn size={15} />
+                    </button>
+                  </>
+                )}
+                <a
+                  href={api.getPublicDownloadUrl(token, singleFile.id)}
+                  className="max-btn btn-mint"
+                  style={{ padding: '7px 12px', textDecoration: 'none' }}
+                >
+                  <Download size={15} /> DOWNLOAD
+                </a>
+              </div>
             </div>
             <div className="preview-stage">
               {isVideoItem(singleFile) ? (
@@ -262,15 +311,22 @@ export default function PublicSharePage({ token }: { token: string }) {
                   style={{ transform: `scale(${previewZoom})`, transition: 'transform 0.15s ease' }}
                 />
               ) : (
-                <div className="max-card" style={{ padding: 24 }}>
-                  Format file ini tidak mendukung preview langsung.
+                <div className="max-card" style={{ padding: 24, textAlign: 'center' }}>
+                  <p style={{ fontWeight: 800 }}>Format file ini tidak mendukung preview langsung.</p>
+                  <a
+                    href={api.getPublicDownloadUrl(token, singleFile.id)}
+                    className="max-btn btn-lime"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <Download size={15} /> DOWNLOAD FILE
+                  </a>
                 </div>
               )}
             </div>
           </div>
         ) : (
-          /* ==================== SHARED FOLDER VIEW (READ-ONLY: LIST/GRID + SORT + REFRESH + PREVIEW) ==================== */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          /* ==================== SHARED FOLDER VIEW ==================== */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {/* Scoped Breadcrumb */}
             <div className="drive-breadcrumb-bar">
               <div className="drive-crumbs">
@@ -282,12 +338,12 @@ export default function PublicSharePage({ token }: { token: string }) {
                     >
                       📁 {b.name}
                     </button>
-                    {idx < breadcrumbs.length - 1 && <ChevronRight size={16} />}
+                    {idx < breadcrumbs.length - 1 && <ChevronRight size={15} />}
                   </React.Fragment>
                 ))}
               </div>
-              <span className="mono" style={{ fontSize: 11, fontWeight: 800 }}>
-                SHARED FOLDER • PREVIEW
+              <span className="mono" style={{ fontSize: 10, fontWeight: 800 }}>
+                SHARED FOLDER • READ-ONLY
               </span>
             </div>
 
@@ -306,7 +362,7 @@ export default function PublicSharePage({ token }: { token: string }) {
                 ))}
               </div>
 
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                 <span className="mono" style={{ fontSize: 11, fontWeight: 800 }}>URUTKAN:</span>
                 <select
                   className="drive-select"
@@ -319,48 +375,91 @@ export default function PublicSharePage({ token }: { token: string }) {
                 </select>
                 <button
                   className="max-btn btn-ink"
-                  style={{ padding: '7px 10px', fontSize: 11 }}
+                  style={{ padding: '6px 9px', fontSize: 11 }}
                   onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
                 >
-                  {sortDir === 'asc' ? <ArrowUpAZ size={15} /> : <ArrowDownAZ size={15} />}
+                  {sortDir === 'asc' ? <ArrowUpAZ size={14} /> : <ArrowDownAZ size={14} />}
                   {sortDir === 'asc' ? 'ASC' : 'DESC'}
                 </button>
+                {mediaFiles.length > 0 && (
+                  <button className="drive-crumb-btn" onClick={selectAllFiles}>
+                    {selectedIds.size === mediaFiles.length ? '☑ BATAL PILIH' : '☐ PILIH SEMUA'}
+                  </button>
+                )}
               </div>
             </div>
 
+            {/* Multi-Select Download Bar */}
+            {selectedIds.size > 0 && (
+              <div
+                className="max-card-sm"
+                style={{
+                  background: 'var(--cobalt)',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                }}
+              >
+                <div className="mono" style={{ fontWeight: 800, fontSize: 13 }}>
+                  ✓ {selectedIds.size} FILE DIPILIH
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button
+                    className="max-btn btn-lime"
+                    style={{ padding: '7px 12px', fontSize: 11 }}
+                    disabled={zipBusy}
+                    onClick={handleMultiDownload}
+                  >
+                    <Download size={14} />{' '}
+                    {selectedIds.size === 1 ? 'DOWNLOAD FILE' : `DOWNLOAD ${selectedIds.size} FILE (ZIP)`}
+                  </button>
+                  <button
+                    className="max-btn btn-ink"
+                    style={{ padding: '7px 10px', fontSize: 11 }}
+                    onClick={() => setSelectedIds(new Set())}
+                  >
+                    <X size={14} /> BATAL
+                  </button>
+                </div>
+              </div>
+            )}
+
             {filteredAndSorted.length === 0 ? (
-              <div className="max-card" style={{ padding: 40, textAlign: 'center', fontWeight: 800 }}>
+              <div className="max-card" style={{ padding: 36, textAlign: 'center', fontWeight: 800 }}>
                 Folder ini kosong.
               </div>
             ) : viewMode === 'list' ? (
+              /* ==================== RESPONSIVE LIST VIEW ==================== */
               <div className="drive-list-table">
-                <div
-                  className="drive-list-row header-row"
-                  style={{ gridTemplateColumns: '44px 1fr 140px 84px 96px 116px 96px' }}
-                >
+                <div className="drive-list-row public-row header-row">
+                  <span />
                   <span />
                   <button className="drive-sort-th" onClick={() => handleSortHeader('name')}>
                     NAMA {sortField === 'name' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                   </button>
                   <span className="drive-list-hide-sm mono" style={{ fontSize: 12 }}>UPLOADER BY</span>
                   <span className="drive-list-hide-sm mono" style={{ fontSize: 12 }}>TIPE</span>
-                  <button className="drive-sort-th" onClick={() => handleSortHeader('size')}>
+                  <button className="drive-sort-th drive-list-hide-sm" onClick={() => handleSortHeader('size')}>
                     UKURAN {sortField === 'size' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                   </button>
                   <button className="drive-sort-th drive-list-hide-sm" onClick={() => handleSortHeader('modifiedTime')}>
                     DIUBAH {sortField === 'modifiedTime' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                   </button>
-                  <span className="drive-list-hide-sm mono" style={{ fontSize: 12 }}>PREVIEW</span>
+                  <span className="mono" style={{ fontSize: 11 }}>AKSI</span>
                 </div>
 
                 {filteredAndSorted.map((item) => {
                   const isVid = isVideoItem(item);
                   const isImg = isImageItem(item);
+                  const checked = selectedIds.has(item.id);
                   return (
                     <div
                       key={item.id}
-                      className="drive-list-row"
-                      style={{ gridTemplateColumns: '44px 1fr 140px 84px 96px 116px 96px', cursor: 'pointer' }}
+                      className={`drive-list-row public-row ${checked ? 'selected' : ''}`}
+                      style={{ cursor: 'pointer' }}
                       onClick={() => {
                         if (item.isFolder) setBreadcrumbs((prev) => [...prev, { id: item.id, name: item.name }]);
                         else {
@@ -369,10 +468,24 @@ export default function PublicSharePage({ token }: { token: string }) {
                         }
                       }}
                     >
+                      <div onClick={(e) => e.stopPropagation()}>
+                        {!item.isFolder ? (
+                          <button
+                            className={`drive-select-box ${checked ? 'checked' : ''}`}
+                            style={{ position: 'static' }}
+                            onClick={() => toggleSelect(item.id)}
+                          >
+                            {checked && <Check size={14} strokeWidth={3} />}
+                          </button>
+                        ) : (
+                          <Folder size={18} fill="#FFE600" />
+                        )}
+                      </div>
+
                       <div
                         style={{
-                          width: 38,
-                          height: 38,
+                          width: 36,
+                          height: 36,
                           border: '2px solid #000',
                           background: item.isFolder ? '#FFE600' : '#141414',
                           display: 'grid',
@@ -381,7 +494,7 @@ export default function PublicSharePage({ token }: { token: string }) {
                         }}
                       >
                         {item.isFolder ? (
-                          <FolderOpen size={18} />
+                          <FolderOpen size={16} />
                         ) : item.hasThumbnail ? (
                           <img
                             src={api.getPublicThumbnailUrl(token, item.id)}
@@ -390,12 +503,20 @@ export default function PublicSharePage({ token }: { token: string }) {
                             loading="lazy"
                           />
                         ) : isVid ? (
-                          <Film size={16} color="#FFE600" />
+                          <Film size={15} color="#FFE600" />
                         ) : (
-                          <ImageIcon size={16} color="#00E676" />
+                          <ImageIcon size={15} color="#00E676" />
                         )}
                       </div>
-                      <div style={{ wordBreak: 'break-word', lineHeight: 1.3 }}>{item.name}</div>
+
+                      <div style={{ minWidth: 0 }}>
+                        <div className="drive-folder-title" title={item.name}>{item.name}</div>
+                        <div className="mono drive-list-mobile-sub">
+                          {item.isFolder ? 'FOLDER' : formatBytes(item.size)}
+                          {item.uploadedBy ? ` • @${item.uploadedBy}` : ''}
+                        </div>
+                      </div>
+
                       <span className="drive-list-hide-sm mono" style={{ fontSize: 11 }}>
                         {item.uploadedBy ? `@${item.uploadedBy}` : '—'}
                       </span>
@@ -410,15 +531,34 @@ export default function PublicSharePage({ token }: { token: string }) {
                           {item.isFolder ? 'FOLDER' : isVid ? 'VIDEO' : isImg ? 'FOTO' : 'FILE'}
                         </span>
                       </span>
-                      <span className="mono">{item.isFolder ? '—' : formatBytes(item.size)}</span>
+                      <span className="mono drive-list-hide-sm">{item.isFolder ? '—' : formatBytes(item.size)}</span>
                       <span className="mono drive-list-hide-sm" style={{ fontSize: 11 }}>
                         {item.modifiedTime ? new Date(item.modifiedTime).toLocaleDateString('id-ID') : '-'}
                       </span>
-                      <div className="drive-list-hide-sm">
+
+                      <div style={{ display: 'flex', gap: 5 }} onClick={(e) => e.stopPropagation()}>
                         {!item.isFolder && (
-                          <button className="max-btn btn-lime" style={{ padding: '5px 8px', fontSize: 11 }}>
-                            <Eye size={13} /> LIHAT
-                          </button>
+                          <>
+                            <button
+                              className="max-btn btn-lime"
+                              style={{ padding: '5px 7px' }}
+                              title="Preview"
+                              onClick={() => {
+                                setPreviewFile(item);
+                                setPreviewZoom(1);
+                              }}
+                            >
+                              <Eye size={13} />
+                            </button>
+                            <a
+                              href={api.getPublicDownloadUrl(token, item.id)}
+                              className="max-btn btn-mint"
+                              style={{ padding: '5px 7px', textDecoration: 'none' }}
+                              title="Download"
+                            >
+                              <Download size={13} />
+                            </a>
+                          </>
                         )}
                       </div>
                     </div>
@@ -426,10 +566,11 @@ export default function PublicSharePage({ token }: { token: string }) {
                 })}
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              /* ==================== SYMMETRICAL GOOGLE DRIVE GRID VIEW ==================== */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {folders.length > 0 && (
                   <div>
-                    <div className="mono" style={{ fontSize: 12, fontWeight: 800, marginBottom: 10 }}>
+                    <div className="mono" style={{ fontSize: 11, fontWeight: 800, marginBottom: 8 }}>
                       FOLDER ({folders.length})
                     </div>
                     <div className="drive-folder-grid">
@@ -437,15 +578,16 @@ export default function PublicSharePage({ token }: { token: string }) {
                         <div
                           key={folder.id}
                           className="drive-folder-card"
-                          style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}
                           onClick={() => setBreadcrumbs((prev) => [...prev, { id: folder.id, name: folder.name }])}
                         >
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, minWidth: 0 }}>
-                            <Folder size={22} fill="#FFE600" style={{ flexShrink: 0, marginTop: 2 }} />
-                            <span className="drive-item-title">{folder.name}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                            <Folder size={20} fill="#FFE600" style={{ flexShrink: 0 }} />
+                            <span className="drive-folder-title" title={folder.name}>
+                              {folder.name}
+                            </span>
                           </div>
-                          <div className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>
-                            Uploader by: {folder.uploadedBy ? `@${folder.uploadedBy}` : '—'}
+                          <div className="mono drive-uploader-line" style={{ color: 'var(--muted)' }}>
+                            By: {folder.uploadedBy ? `@${folder.uploadedBy}` : '—'}
                           </div>
                         </div>
                       ))}
@@ -455,15 +597,19 @@ export default function PublicSharePage({ token }: { token: string }) {
 
                 {mediaFiles.length > 0 && (
                   <div>
-                    <div className="mono" style={{ fontSize: 12, fontWeight: 800, marginBottom: 10 }}>
+                    <div className="mono" style={{ fontSize: 11, fontWeight: 800, marginBottom: 8 }}>
                       FILE ({mediaFiles.length})
                     </div>
                     <div className="drive-file-grid">
                       {mediaFiles.map((file) => {
                         const isVid = isVideoItem(file);
                         const isImg = isImageItem(file);
+                        const checked = selectedIds.has(file.id);
                         return (
-                          <div key={file.id} className="drive-file-card">
+                          <div
+                            key={file.id}
+                            className={`drive-file-card ${checked ? 'selected' : ''}`}
+                          >
                             <div
                               className="drive-thumb-box"
                               onClick={() => {
@@ -471,6 +617,16 @@ export default function PublicSharePage({ token }: { token: string }) {
                                 setPreviewZoom(1);
                               }}
                             >
+                              <div
+                                className={`drive-select-box ${checked ? 'checked' : ''}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleSelect(file.id);
+                                }}
+                              >
+                                {checked && <Check size={15} strokeWidth={3} />}
+                              </div>
+
                               <span
                                 className="pill"
                                 style={{
@@ -491,9 +647,9 @@ export default function PublicSharePage({ token }: { token: string }) {
                                   loading="lazy"
                                 />
                               ) : isVid ? (
-                                <Film size={44} color="#FFE600" />
+                                <Film size={40} color="#FFE600" />
                               ) : (
-                                <ImageIcon size={44} color="#00E676" />
+                                <ImageIcon size={40} color="#00E676" />
                               )}
                             </div>
 
@@ -501,8 +657,8 @@ export default function PublicSharePage({ token }: { token: string }) {
                               <div className="drive-item-title" title={file.name}>
                                 {file.name}
                               </div>
-                              <div className="mono" style={{ fontSize: 11, fontWeight: 800 }}>
-                                Uploader by: {file.uploadedBy ? `@${file.uploadedBy}` : '—'}
+                              <div className="mono drive-uploader-line">
+                                By: {file.uploadedBy ? `@${file.uploadedBy}` : '—'}
                               </div>
                               <div className="mono drive-card-meta-row">
                                 <span>{formatBytes(file.size)}</span>
@@ -510,7 +666,7 @@ export default function PublicSharePage({ token }: { token: string }) {
                               <div className="drive-card-actions">
                                 <button
                                   className="max-btn btn-lime"
-                                  style={{ flex: 1, padding: '7px 10px', fontSize: 11 }}
+                                  style={{ flex: 1, padding: '6px 8px', fontSize: 11 }}
                                   onClick={() => {
                                     setPreviewFile(file);
                                     setPreviewZoom(1);
@@ -518,6 +674,14 @@ export default function PublicSharePage({ token }: { token: string }) {
                                 >
                                   <Eye size={13} /> PREVIEW
                                 </button>
+                                <a
+                                  href={api.getPublicDownloadUrl(token, file.id)}
+                                  className="max-btn btn-mint"
+                                  style={{ padding: '6px 9px', fontSize: 11, textDecoration: 'none' }}
+                                  title="Download"
+                                >
+                                  <Download size={13} />
+                                </a>
                               </div>
                             </div>
                           </div>
@@ -532,13 +696,13 @@ export default function PublicSharePage({ token }: { token: string }) {
         )}
       </main>
 
-      {/* Public Lightbox Preview Modal XL (No Download/Edit/Delete) */}
+      {/* Public Lightbox Preview Modal XL (with Download button!) */}
       {previewFile && (
         <div className="preview-backdrop" onClick={() => setPreviewFile(null)}>
           <div className="preview-modal-xl" onClick={(e) => e.stopPropagation()}>
             <div className="preview-topbar">
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 16, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontWeight: 800, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {previewFile.name}
                 </div>
                 <div className="mono" style={{ fontSize: 11, fontWeight: 700 }}>
@@ -547,19 +711,19 @@ export default function PublicSharePage({ token }: { token: string }) {
                   {previewFile.uploadedBy ? ` • @${previewFile.uploadedBy}` : ''}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {isImageItem(previewFile) && (
                   <>
                     <button
                       className="max-btn btn-ink"
-                      style={{ padding: '8px 10px' }}
+                      style={{ padding: '7px 9px' }}
                       onClick={() => setPreviewZoom((z) => Math.max(0.5, z - 0.25))}
                     >
                       <ZoomOut size={15} />
                     </button>
                     <button
                       className="max-btn btn-ink"
-                      style={{ padding: '8px 10px' }}
+                      style={{ padding: '7px 9px' }}
                       onClick={() => setPreviewZoom((z) => Math.min(3, z + 0.25))}
                     >
                       <ZoomIn size={15} />
@@ -568,17 +732,24 @@ export default function PublicSharePage({ token }: { token: string }) {
                 )}
                 <button
                   className={`max-btn ${showPreviewInfo ? 'btn-cobalt' : 'btn-ink'}`}
-                  style={{ padding: '8px 10px' }}
+                  style={{ padding: '7px 9px' }}
                   onClick={() => setShowPreviewInfo((v) => !v)}
                 >
                   <Info size={15} />
                 </button>
+                <a
+                  href={api.getPublicDownloadUrl(token, previewFile.id)}
+                  className="max-btn btn-mint"
+                  style={{ padding: '7px 11px', textDecoration: 'none' }}
+                >
+                  <Download size={15} /> DOWNLOAD
+                </a>
                 <button
                   className="max-btn btn-magenta"
-                  style={{ padding: '8px 12px' }}
+                  style={{ padding: '7px 10px' }}
                   onClick={() => setPreviewFile(null)}
                 >
-                  <X size={16} /> TUTUP
+                  <X size={15} />
                 </button>
               </div>
             </div>
@@ -590,13 +761,13 @@ export default function PublicSharePage({ token }: { token: string }) {
                     className="max-btn btn-lime preview-nav-btn left"
                     onClick={() => navigatePreview(-1)}
                   >
-                    <ChevronLeft size={22} />
+                    <ChevronLeft size={20} />
                   </button>
                   <button
                     className="max-btn btn-lime preview-nav-btn right"
                     onClick={() => navigatePreview(1)}
                   >
-                    <ChevronRight size={22} />
+                    <ChevronRight size={20} />
                   </button>
                 </>
               )}
@@ -617,8 +788,15 @@ export default function PublicSharePage({ token }: { token: string }) {
                   style={{ transform: `scale(${previewZoom})`, transition: 'transform 0.15s ease' }}
                 />
               ) : (
-                <div className="max-card" style={{ padding: 24 }}>
-                  Format file tidak mendukung preview.
+                <div className="max-card" style={{ padding: 24, textAlign: 'center' }}>
+                  <p style={{ fontWeight: 800 }}>Format file tidak mendukung preview.</p>
+                  <a
+                    href={api.getPublicDownloadUrl(token, previewFile.id)}
+                    className="max-btn btn-lime"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <Download size={15} /> DOWNLOAD
+                  </a>
                 </div>
               )}
 
@@ -627,10 +805,10 @@ export default function PublicSharePage({ token }: { token: string }) {
                   className="max-card-sm"
                   style={{
                     position: 'absolute',
-                    right: 16,
-                    bottom: 16,
-                    width: 280,
-                    padding: 14,
+                    right: 12,
+                    bottom: 12,
+                    width: 'min(280px, 85vw)',
+                    padding: 12,
                     background: '#FFF8E7',
                     zIndex: 20,
                   }}

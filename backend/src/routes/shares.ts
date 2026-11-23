@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import crypto from 'node:crypto';
+import { createRequire } from 'node:module';
 import { Readable } from 'node:stream';
 import { z } from 'zod';
 import { query } from '../config/db.js';
@@ -9,6 +10,16 @@ import {
   isItemWithinSharedRoot,
   listDriveFolderContents,
 } from '../services/googleDrive.js';
+
+const require = createRequire(import.meta.url);
+const createArchive = require('archiver') as (
+  format: 'zip',
+  options?: { store?: boolean }
+) => import('archiver').Archiver;
+
+const publicZipSchema = z.object({
+  fileIds: z.array(z.string().trim().min(1)).min(1).max(50),
+});
 
 interface ShareRow {
   id: string;
@@ -230,6 +241,92 @@ export async function shareRoutes(app: FastifyInstance) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Gagal preview file.';
       return reply.code(502).send({ error: msg });
+    }
+  });
+
+  // Public single file download (scoped strictly to shared item/descendants)
+  app.get('/api/public/share/:token/files/:fileId/download', async (request, reply) => {
+    const { token, fileId } = request.params as { token: string; fileId: string };
+    const share = await getActiveShareByToken(token);
+    if (!share) return reply.code(404).send({ error: 'Link share tidak ditemukan.' });
+
+    try {
+      const allowed = await isItemWithinSharedRoot(fileId, share.drive_item_id);
+      if (!allowed) return reply.code(403).send({ error: 'Akses ditolak.' });
+
+      const meta = await getDriveFileMetadata(fileId);
+      const resp = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
+        { headers: { Authorization: `Bearer ${meta.accessToken}` } }
+      );
+      if (!resp.ok || !resp.body) {
+        return reply.code(resp.status).send({ error: 'Gagal mengunduh file.' });
+      }
+
+      const safeName = meta.name.replace(/["\r\n]/g, '_');
+      reply
+        .header('Content-Type', meta.mimeType)
+        .header('Content-Disposition', `attachment; filename="${safeName}"`);
+      const contentLength = resp.headers.get('content-length');
+      if (contentLength) reply.header('Content-Length', contentLength);
+      return reply.send(Readable.fromWeb(resp.body as never));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Gagal mengunduh file.';
+      return reply.code(502).send({ error: msg });
+    }
+  });
+
+  // Public multiple file ZIP download (every fileId verified inside shared root)
+  app.post('/api/public/share/:token/download-zip', async (request, reply) => {
+    const { token } = request.params as { token: string };
+    const share = await getActiveShareByToken(token);
+    if (!share) return reply.code(404).send({ error: 'Link share tidak ditemukan.' });
+
+    const parsed = publicZipSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Pilih minimal 1 file untuk diunduh.' });
+    }
+
+    const archive = createArchive('zip', { store: true });
+    const zipName = `tgr-share-${Date.now()}.zip`;
+
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="${zipName}"`,
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      'Access-Control-Expose-Headers': 'Content-Disposition',
+    });
+
+    archive.pipe(reply.raw);
+
+    try {
+      const usedNames = new Set<string>();
+      for (const fileId of parsed.data.fileIds) {
+        const allowed = await isItemWithinSharedRoot(fileId, share.drive_item_id);
+        if (!allowed) continue;
+
+        const meta = await getDriveFileMetadata(fileId);
+        const resp = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
+          { headers: { Authorization: `Bearer ${meta.accessToken}` } }
+        );
+        if (!resp.ok || !resp.body) continue;
+
+        let entryName = meta.name;
+        let dup = 1;
+        while (usedNames.has(entryName)) {
+          entryName = `${dup++}_${meta.name}`;
+        }
+        usedNames.add(entryName);
+
+        archive.append(Readable.fromWeb(resp.body as never), { name: entryName });
+      }
+      await archive.finalize();
+    } catch (err) {
+      archive.abort();
+      reply.raw.end();
+      request.log.error(err);
     }
   });
 }
