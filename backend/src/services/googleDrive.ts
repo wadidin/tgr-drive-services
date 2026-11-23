@@ -296,7 +296,7 @@ export async function getDriveFileMetadata(fileId: string) {
   const drive = google.drive({ version: 'v3', auth: oauth2Client });
   const res = await drive.files.get({
     fileId,
-    fields: 'id, name, mimeType, size, thumbnailLink',
+    fields: 'id, name, mimeType, size, thumbnailLink, parents, modifiedTime, description',
   });
   return {
     id: res.data.id ?? fileId,
@@ -304,8 +304,37 @@ export async function getDriveFileMetadata(fileId: string) {
     mimeType: res.data.mimeType ?? 'application/octet-stream',
     size: res.data.size ? Number(res.data.size) : 0,
     thumbnailLink: res.data.thumbnailLink ?? null,
+    parents: res.data.parents ?? [],
+    modifiedTime: res.data.modifiedTime ?? null,
+    description: res.data.description ?? null,
     accessToken,
   };
+}
+
+/**
+ * Verifies that targetItemId is either rootItemId itself or a descendant inside rootItemId
+ * (prevents visitors of a public share link from accessing unshared Drive files).
+ */
+export async function isItemWithinSharedRoot(
+  targetItemId: string,
+  sharedRootId: string
+): Promise<boolean> {
+  if (targetItemId === sharedRootId) return true;
+  const { oauth2Client } = await getAuthenticatedDriveContext();
+  const drive = google.drive({ version: 'v3', auth: oauth2Client });
+
+  let currentId = targetItemId;
+  for (let depth = 0; depth < 12; depth++) {
+    const res = await drive.files.get({
+      fileId: currentId,
+      fields: 'id, parents',
+    });
+    const parents = res.data.parents ?? [];
+    if (parents.includes(sharedRootId)) return true;
+    if (parents.length === 0) return false;
+    currentId = parents[0];
+  }
+  return false;
 }
 
 export async function renameDriveItem(fileId: string, newName: string) {

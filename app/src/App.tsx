@@ -30,13 +30,17 @@ import {
   RefreshCw,
   Search,
   Settings,
+  Share2,
   ShieldCheck,
   Trash2,
   UserPlus,
   X,
   ZoomIn,
   ZoomOut,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
+import PublicSharePage from './PublicSharePage';
 import {
   AdminUserRow,
   api,
@@ -73,6 +77,12 @@ function isVideoDriveItem(item: DriveItem): boolean {
 }
 
 export default function App() {
+  // Public share route (/share/:token) works 100% WITHOUT LOGIN
+  const shareMatch = window.location.pathname.match(/^\/share\/([a-zA-Z0-9_-]+)/);
+  if (shareMatch) {
+    return <PublicSharePage token={shareMatch[1]} />;
+  }
+
   const [user, setUser] = useState<UserProfile | null>(null);
   const [bootLoading, setBootLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('drive');
@@ -121,11 +131,19 @@ export default function App() {
   const [showInfoPanel, setShowInfoPanel] = useState(false);
   const [inspectedItem, setInspectedItem] = useState<DriveItem | null>(null);
 
-  // New folder & Rename modal state
+  // New folder, Rename & Share modal state
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [renameTarget, setRenameTarget] = useState<DriveItem | null>(null);
   const [renameInput, setRenameInput] = useState('');
+  const [shareModal, setShareModal] = useState<{
+    token: string;
+    url: string;
+    itemName: string;
+    isFolder: boolean;
+  } | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
 
   // Preview Lightbox state
   const [previewFile, setPreviewFile] = useState<DriveItem | null>(null);
@@ -435,6 +453,48 @@ export default function App() {
       loadDriveFolder(activeFolderId, searchQuery);
     } catch (err) {
       setDriveErr(err instanceof Error ? err.message : 'Gagal menghapus item.');
+    }
+  }
+
+  async function handleOpenShare(item: {
+    id: string;
+    name: string;
+    isFolder: boolean;
+    mimeType: string;
+  }) {
+    setShareBusy(true);
+    setShareCopied(false);
+    try {
+      const res = await api.createShare({
+        driveItemId: item.id,
+        itemName: item.name,
+        isFolder: item.isFolder,
+        mimeType: item.mimeType,
+      });
+      const url = `${window.location.origin}/share/${res.share.token}`;
+      setShareModal({
+        token: res.share.token,
+        url,
+        itemName: item.name,
+        isFolder: item.isFolder,
+      });
+    } catch (err) {
+      setDriveErr(err instanceof Error ? err.message : 'Gagal membuat link share.');
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function handleRevokeShare() {
+    if (!shareModal) return;
+    setShareBusy(true);
+    try {
+      await api.revokeShare(shareModal.token);
+      setShareModal(null);
+    } catch (err) {
+      setDriveErr(err instanceof Error ? err.message : 'Gagal menonaktifkan link share.');
+    } finally {
+      setShareBusy(false);
     }
   }
 
@@ -764,20 +824,22 @@ export default function App() {
         }}
       />
 
-      {/* Fullscreen Blurred Preloader across ALL pages (Drive, History, Admin, Profile, ZIP, Logout) */}
-      {(driveLoading || historyLoading || adminLoading || zipBusy || profileBusy || logoutBusy) &&
+      {/* Fullscreen Blurred Preloader across ALL pages (Drive, History, Admin, Profile, ZIP, Share, Logout) */}
+      {(driveLoading || historyLoading || adminLoading || zipBusy || profileBusy || logoutBusy || shareBusy) &&
         renderFullscreenPreloader(
           logoutBusy
             ? 'KELUAR DARI SESI...'
-            : zipBusy
-              ? 'MENYIAPKAN ARSIP ZIP...'
-              : profileBusy
-                ? 'MENYIMPAN PROFIL...'
-                : historyLoading
-                  ? 'MEMUAT RIWAYAT UNGGAHAN...'
-                  : adminLoading
-                    ? 'MEMUAT ADMIN CENTER...'
-                    : 'MEMUAT ISI TGR DRIVE...'
+            : shareBusy
+              ? 'MEMPROSES LINK SHARE...'
+              : zipBusy
+                ? 'MENYIAPKAN ARSIP ZIP...'
+                : profileBusy
+                  ? 'MENYIMPAN PROFIL...'
+                  : historyLoading
+                    ? 'MEMUAT RIWAYAT UNGGAHAN...'
+                    : adminLoading
+                      ? 'MEMUAT ADMIN CENTER...'
+                      : 'MEMUAT ISI TGR DRIVE...'
         )}
 
       {/* Full-Screen Drag & Drop Overlay */}
@@ -1047,6 +1109,22 @@ export default function App() {
                   >
                     <FolderPlus size={15} /> FOLDER BARU
                   </button>
+                  {activeFolderId && (
+                    <button
+                      className="max-btn btn-tangerine"
+                      style={{ padding: '8px 12px', fontSize: 12 }}
+                      onClick={() =>
+                        handleOpenShare({
+                          id: activeFolderId,
+                          name: activeCrumb?.name || 'DRIVE GLOBAL',
+                          isFolder: true,
+                          mimeType: 'application/vnd.google-apps.folder',
+                        })
+                      }
+                    >
+                      <Share2 size={15} /> SHARE FOLDER
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1389,6 +1467,17 @@ export default function App() {
                                 </>
                               )}
                               <button
+                                className="max-btn btn-tangerine"
+                                style={{ padding: '5px 7px' }}
+                                title="Share Link (Read-Only)"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenShare(item);
+                                }}
+                              >
+                                <Share2 size={13} />
+                              </button>
+                              <button
                                 className="max-btn btn-cobalt"
                                 style={{ padding: '5px 7px' }}
                                 title="Ganti Nama"
@@ -1444,6 +1533,14 @@ export default function App() {
                                     </span>
                                   </div>
                                   <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                      className="drive-crumb-btn"
+                                      style={{ padding: '3px 5px', background: 'var(--tangerine)' }}
+                                      title="Share Folder"
+                                      onClick={() => handleOpenShare(folder)}
+                                    >
+                                      <Share2 size={12} />
+                                    </button>
                                     <button
                                       className="drive-crumb-btn"
                                       style={{ padding: '3px 5px' }}
@@ -1585,6 +1682,17 @@ export default function App() {
                                       >
                                         <Download size={13} />
                                       </a>
+                                      <button
+                                        className="max-btn btn-tangerine"
+                                        style={{ padding: '6px 8px', fontSize: 11 }}
+                                        title="Share Link (Read-Only)"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleOpenShare(file);
+                                        }}
+                                      >
+                                        <Share2 size={13} />
+                                      </button>
                                       <button
                                         className="max-btn btn-cobalt"
                                         style={{ padding: '6px 8px', fontSize: 11 }}
@@ -2123,6 +2231,14 @@ export default function App() {
               >
                 <Info size={15} />
               </button>
+              <button
+                className="max-btn btn-tangerine"
+                style={{ padding: '8px 12px', fontSize: 12 }}
+                onClick={() => handleOpenShare(previewFile)}
+                title="Share File (Tanpa Login)"
+              >
+                <Share2 size={15} /> SHARE
+              </button>
               <a
                 href={api.getDownloadUrl(previewFile.id)}
                 className="max-btn btn-mint"
@@ -2221,6 +2337,71 @@ export default function App() {
               </div>
             )}
           </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== PUBLIC SHARE LINK MODAL ==================== */}
+      {shareModal && (
+        <div className="preview-backdrop" onClick={() => setShareModal(null)}>
+          <div className="profile-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <h3 style={{ margin: 0, fontSize: 20 }}>
+                SHARE {shareModal.isFolder ? 'FOLDER' : 'FILE'} (PUBLIK)
+              </h3>
+              <button
+                className="max-btn btn-magenta"
+                style={{ padding: '6px 10px' }}
+                onClick={() => setShareModal(null)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div
+              className="max-card-sm"
+              style={{ background: 'var(--lime)', padding: 12, marginBottom: 14, fontWeight: 800, fontSize: 13 }}
+            >
+              {shareModal.isFolder ? '📁' : '📄'} {shareModal.itemName}
+              <div className="mono" style={{ fontSize: 11, marginTop: 4 }}>
+                Mode: READ-ONLY • Tanpa Login • Hanya Preview, Refresh, Grid/List & Sorting
+              </div>
+            </div>
+
+            <label className="mono" style={{ display: 'block', fontSize: 11, fontWeight: 800, marginBottom: 6 }}>
+              LINK SHARE PUBLIK
+            </label>
+            <input className="max-input" value={shareModal.url} readOnly style={{ marginBottom: 14 }} />
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                className="max-btn btn-lime"
+                style={{ flex: 1 }}
+                onClick={() => {
+                  navigator.clipboard.writeText(shareModal.url);
+                  setShareCopied(true);
+                }}
+              >
+                <Copy size={15} /> {shareCopied ? '✓ LINK TERSALIN!' : 'SALIN LINK'}
+              </button>
+              <a
+                href={shareModal.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="max-btn btn-cobalt"
+                style={{ textDecoration: 'none' }}
+              >
+                <ExternalLink size={15} /> BUKA
+              </a>
+            </div>
+
+            <button
+              className="max-btn btn-magenta"
+              style={{ width: '100%', marginTop: 10 }}
+              onClick={handleRevokeShare}
+            >
+              <Trash2 size={15} /> NONAKTIFKAN LINK SHARE INI
+            </button>
           </div>
         </div>
       )}

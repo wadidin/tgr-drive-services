@@ -8,6 +8,7 @@ import { authRoutes } from './routes/auth.js';
 import { uploadRoutes } from './routes/uploads.js';
 import { adminRoutes } from './routes/admin.js';
 import { driveRoutes } from './routes/drive.js';
+import { shareRoutes } from './routes/shares.js';
 
 export async function buildServer() {
   const app = Fastify({ logger: true });
@@ -36,6 +37,7 @@ export async function buildServer() {
   await app.register(authRoutes);
   await app.register(uploadRoutes);
   await app.register(driveRoutes);
+  await app.register(shareRoutes);
   await app.register(adminRoutes);
 
   return app;

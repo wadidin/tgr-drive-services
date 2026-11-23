@@ -53,6 +53,25 @@ async function migrate() {
     );
   `);
 
+  await query(`
+    CREATE TABLE IF NOT EXISTS public_shares (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      token VARCHAR(64) UNIQUE NOT NULL,
+      drive_item_id VARCHAR(128) NOT NULL,
+      item_name TEXT NOT NULL,
+      is_folder BOOLEAN NOT NULL DEFAULT FALSE,
+      mime_type VARCHAR(128) NOT NULL,
+      created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_public_shares_token
+    ON public_shares (token) WHERE is_active = TRUE;
+  `);
+
   console.log('Migration completed successfully!');
   await pool.end();
 }

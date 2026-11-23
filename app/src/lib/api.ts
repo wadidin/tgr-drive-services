@@ -30,6 +30,30 @@ export interface DriveListingResponse {
   };
 }
 
+export interface PublicShareInfo {
+  id?: string;
+  token: string;
+  drive_item_id?: string;
+  driveItemId?: string;
+  item_name?: string;
+  itemName?: string;
+  is_folder?: boolean;
+  isFolder?: boolean;
+  mime_type?: string;
+}
+
+export interface PublicShareResponse {
+  share: {
+    token: string;
+    isFolder: boolean;
+    itemName: string;
+    driveItemId: string;
+  };
+  activeFolderId?: string;
+  file?: DriveItem;
+  files: DriveItem[];
+}
+
 export interface UploadHistoryItem {
   id: string;
   original_filename: string;
@@ -163,6 +187,31 @@ export const api = {
     request<{ ok: boolean }>(`/api/drive/files/${encodeURIComponent(fileId)}`, {
       method: 'DELETE',
     }),
+  createShare: (payload: {
+    driveItemId: string;
+    itemName: string;
+    isFolder: boolean;
+    mimeType: string;
+  }) =>
+    request<{ share: PublicShareInfo }>('/api/shares', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  revokeShare: (token: string) =>
+    request<{ ok: boolean }>(`/api/shares/${encodeURIComponent(token)}`, {
+      method: 'DELETE',
+    }),
+  getPublicShare: async (token: string, folderId?: string): Promise<PublicShareResponse> => {
+    const qs = folderId ? `?folderId=${encodeURIComponent(folderId)}` : '';
+    const res = await fetch(`${API_BASE}/api/public/share/${encodeURIComponent(token)}${qs}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error ?? 'Link share tidak valid atau sudah dinonaktifkan.');
+    return data as PublicShareResponse;
+  },
+  getPublicThumbnailUrl: (token: string, fileId: string) =>
+    `${API_BASE}/api/public/share/${encodeURIComponent(token)}/files/${encodeURIComponent(fileId)}/thumbnail`,
+  getPublicStreamUrl: (token: string, fileId: string) =>
+    `${API_BASE}/api/public/share/${encodeURIComponent(token)}/files/${encodeURIComponent(fileId)}/stream`,
   getThumbnailUrl: (fileId: string) => withAuthQuery(`/api/drive/files/${encodeURIComponent(fileId)}/thumbnail`),
   getStreamUrl: (fileId: string) => withAuthQuery(`/api/drive/files/${encodeURIComponent(fileId)}/stream`),
   getDownloadUrl: (fileId: string) => withAuthQuery(`/api/drive/files/${encodeURIComponent(fileId)}/download`),
