@@ -1,0 +1,9 @@
+{
+  "name": "TGR Drive — 5TB Pro Unlimited Uploader",
+  "short_name": "TGR Drive",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFF8E7",
+  "theme_color": "#120D1D",
+  "description": "Upload foto & video ukuran unlimited ke Google Drive 5TB Pro tanpa akun Google."
+}

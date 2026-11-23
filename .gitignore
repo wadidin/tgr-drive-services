@@ -1,0 +1,21 @@
+# Environment variables (NEVER commit real secrets)
+.env
+.env.local
+.env.*.local
+.netlify/
+
+# Dependencies & builds
+node_modules/
+dist/
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+*.log
