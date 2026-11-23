@@ -440,9 +440,9 @@ export default function PublicSharePage({ token }: { token: string }) {
                           style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}
                           onClick={() => setBreadcrumbs((prev) => [...prev, { id: folder.id, name: folder.name }])}
                         >
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, minWidth: 0 }}>
                             <Folder size={22} fill="#FFE600" style={{ flexShrink: 0, marginTop: 2 }} />
-                            <span style={{ wordBreak: 'break-word', lineHeight: 1.3 }}>{folder.name}</span>
+                            <span className="drive-item-title">{folder.name}</span>
                           </div>
                           <div className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>
                             Uploader by: {folder.uploadedBy ? `@${folder.uploadedBy}` : '—'}
@@ -497,26 +497,28 @@ export default function PublicSharePage({ token }: { token: string }) {
                               )}
                             </div>
 
-                            <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                              <div style={{ fontWeight: 800, fontSize: 13, wordBreak: 'break-word', lineHeight: 1.35 }}>
+                            <div className="drive-card-body">
+                              <div className="drive-item-title" title={file.name}>
                                 {file.name}
                               </div>
                               <div className="mono" style={{ fontSize: 11, fontWeight: 800 }}>
                                 Uploader by: {file.uploadedBy ? `@${file.uploadedBy}` : '—'}
                               </div>
-                              <div className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
-                                {formatBytes(file.size)}
+                              <div className="mono drive-card-meta-row">
+                                <span>{formatBytes(file.size)}</span>
                               </div>
-                              <button
-                                className="max-btn btn-lime"
-                                style={{ padding: '7px 10px', fontSize: 11 }}
-                                onClick={() => {
-                                  setPreviewFile(file);
-                                  setPreviewZoom(1);
-                                }}
-                              >
-                                <Eye size={13} /> PREVIEW
-                              </button>
+                              <div className="drive-card-actions">
+                                <button
+                                  className="max-btn btn-lime"
+                                  style={{ flex: 1, padding: '7px 10px', fontSize: 11 }}
+                                  onClick={() => {
+                                    setPreviewFile(file);
+                                    setPreviewZoom(1);
+                                  }}
+                                >
+                                  <Eye size={13} /> PREVIEW
+                                </button>
+                              </div>
                             </div>
                           </div>
                         );

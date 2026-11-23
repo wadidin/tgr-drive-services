@@ -1526,9 +1526,9 @@ export default function App() {
                                 onClick={() => openFolder(folder)}
                               >
                                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, minWidth: 0 }}>
+                                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, minWidth: 0, flex: 1 }}>
                                     <Folder size={22} fill="#FFE600" style={{ flexShrink: 0, marginTop: 2 }} />
-                                    <span style={{ wordBreak: 'break-word', lineHeight: 1.3 }}>
+                                    <span className="drive-item-title">
                                       {folder.name}
                                     </span>
                                   </div>
@@ -1631,30 +1631,14 @@ export default function App() {
                                     )}
                                   </div>
 
-                                  <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                    <div
-                                      style={{
-                                        fontWeight: 800,
-                                        fontSize: 13,
-                                        wordBreak: 'break-word',
-                                        lineHeight: 1.35,
-                                      }}
-                                      title={file.name}
-                                    >
+                                  <div className="drive-card-body">
+                                    <div className="drive-item-title" title={file.name}>
                                       {file.name}
                                     </div>
                                     <div className="mono" style={{ fontSize: 11, fontWeight: 800, color: '#000' }}>
                                       Uploader by: {file.uploadedBy ? `@${file.uploadedBy}` : '—'}
                                     </div>
-                                    <div
-                                      className="mono"
-                                      style={{
-                                        fontSize: 11,
-                                        color: 'var(--muted)',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                      }}
-                                    >
+                                    <div className="mono drive-card-meta-row">
                                       <span>{formatBytes(file.size)}</span>
                                       <span>
                                         {file.modifiedTime
@@ -1662,7 +1646,7 @@ export default function App() {
                                           : ''}
                                       </span>
                                     </div>
-                                    <div style={{ display: 'flex', gap: 5 }}>
+                                    <div className="drive-card-actions">
                                       <button
                                         className="max-btn btn-lime"
                                         style={{ flex: 1, padding: '6px 8px', fontSize: 11 }}
